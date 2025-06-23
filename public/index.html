@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数学公式与化学式渲染器 (PNG)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            font-family: monospace;
+        }
+
+        input,
+        select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        select {
+            width: 100%;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .result {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .result img {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: white;
+        }
+
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+
+        .examples {
+            margin-top: 30px;
+        }
+
+        .example-item {
+            margin-bottom: 10px;
+            cursor: pointer;
+            color: #0066cc;
+        }
+
+        hr {
+            margin: 30px 0;
+            border: 0;
+            border-top: 1px solid #eee;
+        }
+
+        .info-text {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .collapsible {
+            cursor: pointer;
+            background-color: #3a87ad;
+            color: white;
+            padding: 10px;
+            width: 100%;
+            border: none;
+            text-align: left;
+            outline: none;
+            font-size: 15px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+
+        .collapsible:after {
+            content: '\002B';
+            /* + 符号 */
+            font-weight: bold;
+            float: right;
+        }
+
+        .active-section:after {
+            content: "\2212";
+            /* - 符号 */
+        }
+
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.2s ease-out;
+            background-color: #f9f9f9;
+            padding: 0 10px;
+            margin-bottom: 10px;
+        }
+
+        .active-section+.collapsible-content {
+            max-height: 500px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+        }
+
+        .header-nav {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            margin-right: 5px;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }
+
+        .tab:hover {
+            background-color: #f0f0f0;
+        }
+
+        .tab.active {
+            border-color: #ddd;
+            background-color: #fff;
+            margin-bottom: -1px;
+        }
+
+        .loading-spinner {
+            display: none;
+            margin: 20px auto;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .category-header {
+            background-color: #eaeaea;
+            padding: 5px 10px;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        #downloadButton {
+            margin-left: 10px;
+            background-color: #2196F3;
+        }
+
+        #downloadButton:hover {
+            background-color: #0b7dda;
+        }
+
+        .flex-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .flex-item {
+            flex: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header-nav">
+        <h1>数学公式与化学式渲染器 (PNG)</h1>
+    </div>
+
+    <div class="container">
+        <div class="form-group">
+            <label for="formula">LaTeX 公式:</label>
+            <textarea id="formula" placeholder="输入 LaTeX 格式的数学公式或化学公式，支持 mhchem 和 chemfig 等包"></textarea>
+        </div>
+
+        <button type="button" class="collapsible">渲染设置</button>
+        <div class="collapsible-content">
+            <div class="form-group">
+                <label for="color">文本颜色:</label>
+                <input type="color" id="color" value="#000000">
+            </div>
+
+            <div class="form-group">
+                <label for="backgroundColor">背景颜色:</label>
+                <input type="color" id="backgroundColor" value="#ffffff">
+                <div class="info-text">选择白色表示透明背景</div>
+            </div>
+
+            <div class="form-group">
+                <label for="dpi">解析度 (DPI):</label>
+                <input type="number" id="dpi" min="72" max="600" step="1" value="300">
+                <div class="info-text">只影响PNG输出，更高的值生成更大、更清晰的图像</div>
+            </div>
+
+            <div class="form-group">
+                <label for="fontSize">字体大小:</label>
+                <select id="fontSize">
+                    <option value="">默认</option>
+                    <option value="8">极小 (8pt)</option>
+                    <option value="10">很小 (10pt)</option>
+                    <option value="12">小 (12pt)</option>
+                    <option value="14">正常 (14pt)</option>
+                    <option value="17">大 (17pt)</option>
+                    <option value="20">很大 (20pt)</option>
+                    <option value="25">超大 (25pt)</option>
+                </select>
+                <div class="info-text">调整公式的字体大小</div>
+            </div>
+
+            <div class="form-group">
+                <label for="padding">内边距 (像素):</label>
+                <input type="number" id="padding" min="0" max="50" step="1" value="5">
+                <div class="info-text">在公式周围添加空白间距，默认为5像素</div>
+            </div>
+
+            <div class="flex-container">
+                <div class="flex-item">
+                    <label for="width">宽度 (像素):</label>
+                    <input type="number" id="width" placeholder="自动" min="100" max="2000" step="10">
+                </div>
+                <div class="flex-item">
+                    <label for="height">高度 (像素):</label>
+                    <input type="number" id="height" placeholder="自动" min="100" max="2000" step="10">
+                </div>
+            </div>
+            <div class="info-text">
+                - 只填宽度：内容充满宽度，高度自适应<br>
+                - 只填高度：内容充满高度，宽度自适应<br>
+                - 同时填写：内容充满指定区域（可能拉伸）<br>
+                - 都不填：内容自适应
+            </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 20px;">
+            <button id="render">渲染公式</button>
+            <button id="downloadButton">下载结果</button>
+        </div>
+
+        <div class="loading-spinner" id="loading"></div>
+
+        <div class="result" id="result">
+            <!-- 渲染结果将在这里显示 -->
+        </div>
+    </div>
+
+    <hr>
+
+    <div class="examples">
+        <h3>严格格式示例 (请按格式输入):</h3>
+
+        <div class="category-header">数学公式格式：$...$</div>
+        <div class="example-item" data-formula="$E = mc^2$">
+            $E = mc^2$
+        </div>
+        <div class="example-item" data-formula="$\frac{-b \pm \sqrt{b^2-4ac}}{2a}$">
+            $\frac{-b \pm \sqrt{b^2-4ac}}{2a}$
+        </div>
+        <div class="example-item" data-formula="$\int_{a}^{b} f(x) \, dx = F(b) - F(a)$">
+            $\int_{a}^{b} f(x) \, dx = F(b) - F(a)$
+        </div>
+        <div class="example-item" data-formula="$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$">
+            $\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$
+        </div>
+        <div class="example-item" data-formula="$\lim_{x \to 0} \frac{\sin x}{x} = 1$">
+            $\lim_{x \to 0} \frac{\sin x}{x} = 1$
+        </div>
+
+        <div class="category-header">矩阵格式：$...$</div>
+        <div class="example-item" data-formula="$\begin{pmatrix} a & b \\ c & d \end{pmatrix}$">
+            $\begin{pmatrix} a & b \\ c & d \end{pmatrix}$
+        </div>
+        <div class="example-item" data-formula="$\begin{bmatrix} 1 & 2 & 3 \\ 4 & 5 & 6 \\ 7 & 8 & 9 \end{bmatrix}$">
+            $\begin{bmatrix} 1 & 2 & 3 \\ 4 & 5 & 6 \\ 7 & 8 & 9 \end{bmatrix}$
+        </div>
+        <div class="example-item" data-formula="$\det(A) = \begin{vmatrix} a & b \\ c & d \end{vmatrix} = ad - bc$">
+            $\det(A) = \begin{vmatrix} a & b \\ c & d \end{vmatrix} = ad - bc$
+        </div>
+
+        <div class="category-header">数学环境格式：直接使用</div>
+        <div class="example-item"
+            data-formula="\begin{align} f(x) &= ax^2 + bx + c \\ &= a(x^2 + \frac{b}{a}x) + c \end{align}">
+            \begin{align} f(x) &= ax^2 + bx + c \\ &= a(x^2 + \frac{b}{a}x) + c \end{align}
+        </div>
+        <div class="example-item"
+            data-formula="\begin{cases} x & \text{if } x \geq 0 \\ -x & \text{if } x < 0 \end{cases}">
+            \begin{cases} x & \text{if } x \geq 0 \\ -x & \text{if } x < 0 \end{cases} </div>
+                <div class="example-item"
+                    data-formula="\begin{align} \nabla \times \vec{E} &= -\frac{\partial \vec{B}}{\partial t} \\ \nabla \times \vec{B} &= \mu_0 \vec{J} + \mu_0 \varepsilon_0 \frac{\partial \vec{E}}{\partial t} \\ \nabla \cdot \vec{E} &= \frac{\rho}{\varepsilon_0} \\ \nabla \cdot \vec{B} &= 0 \end{align}">
+                    \begin{align} \nabla \times \vec{E} &= -\frac{\partial \vec{B}}{\partial t} \\ \nabla \times \vec{B}
+                    &= \mu_0 \vec{J} + \mu_0 \varepsilon_0 \frac{\partial \vec{E}}{\partial t} \\ \nabla \cdot \vec{E}
+                    &= \frac{\rho}{\varepsilon_0} \\ \nabla \cdot \vec{B} &= 0 \end{align}
+                </div>
+                <div class="example-item" data-formula="\begin{gather} E = mc^2 \\ F = ma \\ p = mv \end{gather}">
+                    \begin{gather} E = mc^2 \\ F = ma \\ p = mv \end{gather}
+                </div>
+                <div class="example-item"
+                    data-formula="\begin{multline} f(x) = a_0 + a_1 x + a_2 x^2 + a_3 x^3 + a_4 x^4 \\ + a_5 x^5 + a_6 x^6 + a_7 x^7 + a_8 x^8 \end{multline}">
+                    \begin{multline} f(x) = a_0 + a_1 x + a_2 x^2 + a_3 x^3 + a_4 x^4 \\ + a_5 x^5 + a_6 x^6 + a_7 x^7 +
+                    a_8 x^8 \end{multline}
+                </div>
+
+                <div class="category-header">多行数学公式系统</div>
+                <div class="example-item"
+                    data-formula="\begin{align} \sin^2 x + \cos^2 x &= 1 \\ \tan x &= \frac{\sin x}{\cos x} \\ \sec x &= \frac{1}{\cos x} \\ \csc x &= \frac{1}{\sin x} \end{align}">
+                    \begin{align} \sin^2 x + \cos^2 x &= 1 \\ \tan x &= \frac{\sin x}{\cos x} \\ \sec x &= \frac{1}{\cos
+                    x} \\ \csc x &= \frac{1}{\sin x} \end{align}
+                </div>
+                <div class="example-item"
+                    data-formula="\begin{align} \frac{d}{dx}[x^n] &= nx^{n-1} \\ \frac{d}{dx}[e^x] &= e^x \\ \frac{d}{dx}[\ln x] &= \frac{1}{x} \\ \frac{d}{dx}[\sin x] &= \cos x \end{align}">
+                    \begin{align} \frac{d}{dx}[x^n] &= nx^{n-1} \\ \frac{d}{dx}[e^x] &= e^x \\ \frac{d}{dx}[\ln x] &=
+                    \frac{1}{x} \\ \frac{d}{dx}[\sin x] &= \cos x \end{align}
+                </div>
+                <div class="example-item"
+                    data-formula="\begin{align} \int x^n \, dx &= \frac{x^{n+1}}{n+1} + C \\ \int e^x \, dx &= e^x + C \\ \int \frac{1}{x} \, dx &= \ln|x| + C \\ \int \sin x \, dx &= -\cos x + C \end{align}">
+                    \begin{align} \int x^n \, dx &= \frac{x^{n+1}}{n+1} + C \\ \int e^x \, dx &= e^x + C \\ \int
+                    \frac{1}{x} \, dx &= \ln|x| + C \\ \int \sin x \, dx &= -\cos x + C \end{align}
+                </div>
+
+                <div class="category-header">多步骤方程求解</div>
+                <div class="example-item"
+                    data-formula="\begin{align} 2x + 3 &= 7 \\ 2x &= 7 - 3 \\ 2x &= 4 \\ x &= 2 \end{align}">
+                    \begin{align} 2x + 3 &= 7 \\ 2x &= 7 - 3 \\ 2x &= 4 \\ x &= 2 \end{align}
+                </div>
+                <div class="example-item"
+                    data-formula="\begin{align} x^2 - 5x + 6 &= 0 \\ (x - 2)(x - 3) &= 0 \\ x - 2 = 0 \quad \text{or} \quad x - 3 &= 0 \\ x = 2 \quad \text{or} \quad x &= 3 \end{align}">
+                    \begin{align} x^2 - 5x + 6 &= 0 \\ (x - 2)(x - 3) &= 0 \\ x - 2 = 0 \quad \text{or} \quad x - 3 &= 0
+                    \\ x = 2 \quad \text{or} \quad x &= 3 \end{align}
+                </div>
+
+                <div class="category-header">复杂数学推导</div>
+                <div class="example-item"
+                    data-formula="\begin{align} \lim_{n \to \infty} \left(1 + \frac{1}{n}\right)^n &= e \\ \sum_{n=0}^{\infty} \frac{x^n}{n!} &= e^x \\ \int_{-\infty}^{\infty} e^{-x^2} \, dx &= \sqrt{\pi} \\ \zeta(2) = \sum_{n=1}^{\infty} \frac{1}{n^2} &= \frac{\pi^2}{6} \end{align}">
+                    \begin{align} \lim_{n \to \infty} \left(1 + \frac{1}{n}\right)^n &= e \\ \sum_{n=0}^{\infty}
+                    \frac{x^n}{n!} &= e^x \\ \int_{-\infty}^{\infty} e^{-x^2} \, dx &= \sqrt{\pi} \\ \zeta(2) =
+                    \sum_{n=1}^{\infty} \frac{1}{n^2} &= \frac{\pi^2}{6} \end{align}
+                </div>
+
+                <div class="category-header">多行化学反应序列</div>
+                <div class="example-item"
+                    data-formula="\begin{align} \ce{CH4 + 2O2} &\ce{-> CO2 + 2H2O} \\ \ce{C2H6 + 7/2 O2} &\ce{-> 2CO2 + 3H2O} \\ \ce{C3H8 + 5O2} &\ce{-> 3CO2 + 4H2O} \end{align}">
+                    \begin{align} \ce{CH4 + 2O2} &\ce{-> CO2 + 2H2O} \\ \ce{C2H6 + 7/2 O2} &\ce{-> 2CO2 + 3H2O} \\
+                    \ce{C3H8 + 5O2} &\ce{-> 3CO2 + 4H2O} \end{align}
+                </div>
+                <div class="example-item"
+                    data-formula="\begin{align} \ce{Zn + 2HCl} &\ce{-> ZnCl2 + H2 ^} \\ \ce{Mg + 2HCl} &\ce{-> MgCl2 + H2 ^} \\ \ce{Fe + 2HCl} &\ce{-> FeCl2 + H2 ^} \end{align}">
+                    \begin{align} \ce{Zn + 2HCl} &\ce{-> ZnCl2 + H2 ^} \\ \ce{Mg + 2HCl} &\ce{-> MgCl2 + H2 ^} \\ \ce{Fe
+                    + 2HCl} &\ce{-> FeCl2 + H2 ^} \end{align}
+                </div>
+                <div class="example-item"
+                    data-formula="\begin{align} \ce{NaCl_{(s)}} &\ce{->[\Delta] Na^+_{(l)} + Cl^-_{(l)}} \\ \ce{2NaCl_{(l)}} &\ce{->[电解] 2Na_{(l)} + Cl2_{(g)} ^} \\ \ce{2Na_{(s)} + Cl2_{(g)}} &\ce{-> 2NaCl_{(s)}} \end{align}">
+                    \begin{align} \ce{NaCl_{(s)}} &\ce{->[\Delta] Na^+_{(l)} + Cl^-_{(l)}} \\ \ce{2NaCl_{(l)}}
+                    &\ce{->[电解] 2Na_{(l)} + Cl2_{(g)} ^} \\ \ce{2Na_{(s)} + Cl2_{(g)}} &\ce{-> 2NaCl_{(s)}} \end{align}
+                </div>
+
+                <div class="category-header">有机化学反应步骤</div>
+                <div class="example-item"
+                    data-formula="\begin{align} \ce{CH3CH2OH} &\ce{->[H2SO4, \Delta] CH2=CH2 + H2O} \\ \ce{CH2=CH2 + H2O} &\ce{->[H2SO4] CH3CH2OH} \\ \ce{CH3CH2OH + CH3COOH} &\ce{->[H2SO4] CH3COOCH2CH3 + H2O} \end{align}">
+                    \begin{align} \ce{CH3CH2OH} &\ce{->[H2SO4, \Delta] CH2=CH2 + H2O} \\ \ce{CH2=CH2 + H2O}
+                    &\ce{->[H2SO4] CH3CH2OH} \\ \ce{CH3CH2OH + CH3COOH} &\ce{->[H2SO4] CH3COOCH2CH3 + H2O} \end{align}
+                </div>
+
+                <div class="category-header">化学平衡系统</div>
+                <div class="example-item"
+                    data-formula="\begin{align} \ce{N2 + 3H2} &\ce{<=> 2NH3} \\ \ce{2SO2 + O2} &\ce{<=> 2SO3} \\ \ce{H2 + I2} &\ce{<=> 2HI} \\ \ce{PCl5} &\ce{<=> PCl3 + Cl2} \end{align}">
+                    \begin{align} \ce{N2 + 3H2} &\ce{<=> 2NH3} \\ \ce{2SO2 + O2} &\ce{<=> 2SO3} \\ \ce{H2 + I2} &\ce{<=>
+                                2HI} \\ \ce{PCl5} &\ce{<=> PCl3 + Cl2} \end{align}
+                </div>
+
+                <div class="category-header">电化学反应</div>
+                <div class="example-item"
+                    data-formula="\begin{align} \text{阳极：} \ce{Zn} &\ce{-> Zn^2+ + 2e^-} \\ \text{阴极：} \ce{Cu^2+ + 2e^-} &\ce{-> Cu} \\ \text{总反应：} \ce{Zn + Cu^2+} &\ce{-> Zn^2+ + Cu} \end{align}">
+                    \begin{align} \text{阳极：} \ce{Zn} &\ce{-> Zn^2+ + 2e^-} \\ \text{阴极：} \ce{Cu^2+ + 2e^-} &\ce{-> Cu}
+                    \\ \text{总反应：} \ce{Zn + Cu^2+} &\ce{-> Zn^2+ + Cu} \end{align}
+                </div>
+
+                <div class="category-header">酸碱滴定过程</div>
+                <div class="example-item"
+                    data-formula="\begin{align} \ce{HCl + NaOH} &\ce{-> NaCl + H2O} \\ \ce{H2SO4 + 2NaOH} &\ce{-> Na2SO4 + 2H2O} \\ \ce{CH3COOH + NaOH} &\ce{-> CH3COONa + H2O} \end{align}">
+                    \begin{align} \ce{HCl + NaOH} &\ce{-> NaCl + H2O} \\ \ce{H2SO4 + 2NaOH} &\ce{-> Na2SO4 + 2H2O} \\
+                    \ce{CH3COOH + NaOH} &\ce{-> CH3COONa + H2O} \end{align}
+                </div>
+
+                <div class="category-header">复杂氧化还原反应</div>
+                <div class="example-item"
+                    data-formula="\begin{align} \ce{MnO4^- + 8H^+ + 5e^-} &\ce{-> Mn^2+ + 4H2O} \\ \ce{Fe^2+} &\ce{-> Fe^3+ + e^-} \\ \ce{MnO4^- + 8H^+ + 5Fe^2+} &\ce{-> Mn^2+ + 4H2O + 5Fe^3+} \end{align}">
+                    \begin{align} \ce{MnO4^- + 8H^+ + 5e^-} &\ce{-> Mn^2+ + 4H2O} \\ \ce{Fe^2+} &\ce{-> Fe^3+ + e^-} \\
+                    \ce{MnO4^- + 8H^+ + 5Fe^2+} &\ce{-> Mn^2+ + 4H2O + 5Fe^3+} \end{align}
+                </div>
+
+                <div class="category-header">分步反应机理</div>
+                <div class="example-item"
+                    data-formula="\begin{align} \text{步骤1：} \ce{A + B} &\ce{-> AB*} \quad \text{(慢)} \\ \text{步骤2：} \ce{AB* + C} &\ce{-> ABC} \quad \text{(快)} \\ \text{总反应：} \ce{A + B + C} &\ce{-> ABC} \end{align}">
+                    \begin{align} \text{步骤1：} \ce{A + B} &\ce{-> AB*} \quad \text{(慢)} \\ \text{步骤2：} \ce{AB* + C}
+                    &\ce{-> ABC} \quad \text{(快)} \\ \text{总反应：} \ce{A + B + C} &\ce{-> ABC} \end{align}
+                </div>
+
+                <div class="category-header">输入格式说明</div>
+                <div
+                    style="background-color: #fff3cd; padding: 15px; margin: 15px 0; border-radius: 4px; border: 1px solid #ffeaa7;">
+                    <strong>⚠️ 严格格式要求：</strong><br><br>
+                    <strong>1. 数学公式：</strong>必须用 <code>$...$</code> 包装<br>
+                    &nbsp;&nbsp;&nbsp;• 正确：<code>$E = mc^2$</code><br>
+                    &nbsp;&nbsp;&nbsp;• 错误：<code>E = mc^2</code><br><br>
+
+                    <strong>2. 化学公式：</strong>必须用 <code>\ce{...}</code> 包装<br>
+                    &nbsp;&nbsp;&nbsp;• 正确：<code>\ce{H2O}</code><br>
+                    &nbsp;&nbsp;&nbsp;• 错误：<code>H2O</code><br><br>
+
+                    <strong>3. 数学环境：</strong>直接使用，不需要包装<br>
+                    &nbsp;&nbsp;&nbsp;• 正确：<code>\begin{align} ... \end{align}</code><br>
+                    &nbsp;&nbsp;&nbsp;• 错误：<code>$\begin{align} ... \end{align}$</code><br><br>
+
+                    <strong>4. 中文内容：</strong>可以直接混合使用<br>
+                    &nbsp;&nbsp;&nbsp;• 支持：<code>$E = mc^2$ (爱因斯坦公式)</code><br><br>
+
+                    <strong>💡 提示：</strong>点击上方示例可以自动填入正确格式
+                </div>
+
+                <div class="category-header">API参数测试提示</div>
+                <div
+                    style="background-color: #e8f4f8; padding: 10px; margin: 10px 0; border-radius: 4px; font-size: 0.9em;">
+                    <strong>参数测试建议：</strong><br>
+                    • <strong>字体大小:</strong> 尝试不同的fontSize值 (8-25)<br>
+                    • <strong>颜色:</strong> 修改文本颜色和背景颜色<br>
+                    • <strong>尺寸:</strong> 设置width/height测试自适应<br>
+                    • <strong>分辨率:</strong> 调整DPI值 (72-600)<br>
+                    • <strong>内边距:</strong> 修改padding值观察效果<br><br>
+                    <strong>注意:</strong> 宽度/高度/内边距调整需要 <a href="https://imagemagick.org/script/download.php#windows"
+                        target="_blank">ImageMagick</a> 支持<br>
+                    <small>当前配置路径: <code>C:\Program Files\ImageMagick-7.1.1-Q16\magick.exe</code></small>
+                </div>
+        </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                // 获取DOM元素
+                const formulaInput = document.getElementById('formula');
+                const colorInput = document.getElementById('color');
+                const backgroundColorInput = document.getElementById('backgroundColor');
+                const dpiInput = document.getElementById('dpi');
+                const fontSizeSelect = document.getElementById('fontSize');
+                const widthInput = document.getElementById('width');
+                const heightInput = document.getElementById('height');
+                const paddingInput = document.getElementById('padding');
+                const renderButton = document.getElementById('render');
+                const downloadButton = document.getElementById('downloadButton');
+                const resultDiv = document.getElementById('result');
+                const loadingSpinner = document.getElementById('loading');
+                const exampleItems = document.querySelectorAll('.example-item');
+
+                // 设置可折叠部分
+                const collapsibles = document.querySelectorAll(".collapsible");
+                collapsibles.forEach(item => {
+                    item.addEventListener("click", function () {
+                        this.classList.toggle("active-section");
+                        const content = this.nextElementSibling;
+                        if (content.style.maxHeight) {
+                            content.style.maxHeight = null;
+                        } else {
+                            content.style.maxHeight = content.scrollHeight + "px";
+                        }
+                    });
+                });
+
+                // 为示例添加点击事件
+                exampleItems.forEach(item => {
+                    item.addEventListener('click', function () {
+                        formulaInput.value = this.getAttribute('data-formula');
+                    });
+                });
+
+                // 渲染按钮点击处理
+                renderButton.addEventListener('click', async function () {
+                    const formula = formulaInput.value.trim();
+                    if (!formula) {
+                        resultDiv.innerHTML = '<p class="error">请输入公式！</p>';
+                        return;
+                    }
+
+                    try {
+                        await renderFormula();
+                        formulaInput.value = formula; // 保持输入框内容与渲染公式一致
+                    } catch (error) {
+                        resultDiv.innerHTML = `<p class="error">渲染失败: ${error.message}</p>`;
+                    }
+                });
+
+                // 下载按钮点击处理
+                downloadButton.addEventListener('click', function () {
+                    const imgElement = document.querySelector('#result img');
+                    if (imgElement) {
+                        // 创建一个临时链接元素
+                        const a = document.createElement('a');
+                        a.href = imgElement.src;
+
+                        // 设置下载文件名为PNG
+                        a.download = `formula.png`;
+
+                        // 模拟点击
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    } else {
+                        alert('请先渲染公式！');
+                    }
+                });
+
+                // 渲染公式
+                async function renderFormula() {
+                    // 显示加载动画
+                    loadingSpinner.style.display = 'block';
+                    resultDiv.innerHTML = '';
+
+                    try {
+                        const color = colorInput.value;
+                        const backgroundColor = backgroundColorInput.value === '#ffffff' ? 'transparent' : backgroundColorInput.value;
+                        const dpi = dpiInput.value;
+                        const fontSize = fontSizeSelect.value;
+                        const width = widthInput.value.trim() ? parseInt(widthInput.value.trim()) : null;
+                        const height = heightInput.value.trim() ? parseInt(heightInput.value.trim()) : null;
+                        const padding = paddingInput.value.trim() ? parseInt(paddingInput.value.trim()) : 5;
+                        const formula = formulaInput.value.trim();
+
+                        // 构建请求URL
+                        const url = `/api/render`;
+
+                        // 准备请求参数
+                        const requestData = {
+                            formula,
+                            color,
+                            backgroundColor,
+                            dpi,
+                            padding
+                        };
+
+                        // 添加可选参数
+                        if (fontSize) requestData.fontSize = parseInt(fontSize);
+                        if (width) requestData.width = width;
+                        if (height) requestData.height = height;
+
+                        // 添加调试信息
+                        console.log('发送渲染请求，颜色值:', color);
+
+                        // 发送POST请求
+                        const response = await fetch(url, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(requestData)
+                        });
+
+                        if (!response.ok) {
+                            let errorMessage = '';
+
+                            try {
+                                // 尝试解析JSON错误响应
+                                const errorObj = await response.json();
+                                errorMessage = errorObj.error || '未知错误';
+                            } catch (e) {
+                                // 如果不是JSON，尝试读取文本
+                                errorMessage = await response.text() || `服务器错误 (${response.status})`;
+                            }
+
+                            // 格式化权限相关的错误信息
+                            if (errorMessage.includes('security risk') ||
+                                errorMessage.includes('elevated privileges') ||
+                                errorMessage.includes('管理员权限')) {
+
+                                throw new Error(`MiKTeX权限错误: ${errorMessage}
+                
+权限问题解决方法:
+1. 请以普通用户身份(非管理员)运行此Node.js应用
+2. 或打开MiKTeX Console，在"设置"中调整权限设置
+3. 或者尝试重新安装MiKTeX，选择"为所有用户安装"选项`);
+                            }
+
+                            throw new Error(errorMessage);
+                        }
+
+                        // 获取二进制数据并转换为URL
+                        const blob = await response.blob();
+                        const imageUrl = URL.createObjectURL(blob);
+
+                        // 显示结果
+                        resultDiv.innerHTML = `<img src="${imageUrl}" alt="渲染公式">`;
+                    } catch (error) {
+                        console.error('渲染错误:', error);
+
+                        // 格式化错误消息以提高可读性
+                        let errorMessage = error.message || '未知错误';
+                        errorMessage = errorMessage.replace(/\n/g, '<br>');
+                        errorMessage = errorMessage.replace(/解决方法:/g, '<strong>解决方法:</strong>');
+
+                        resultDiv.innerHTML = `<p class="error">渲染失败:</p><p>${errorMessage}</p>`;
+                    } finally {
+                        // 隐藏加载动画
+                        loadingSpinner.style.display = 'none';
+                    }
+                }
+            });
+        </script>
+</body>
+
+</html>

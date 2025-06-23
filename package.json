@@ -1,0 +1,21 @@
+{
+  "name": "math-render",
+  "version": "1.0.0",
+  "description": "数学公式渲染服务",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test-latex": "node debug-latex.js",
+    "fix-miktex": "node fix-miktex.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.15"
+  },
+  "engines": {
+    "node": ">=12.0.0"
+  }
+}
