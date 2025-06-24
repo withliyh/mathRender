@@ -106,9 +106,8 @@ function createXeLaTeXDocument(formula, options) {
 \\usepackage{chemmacros}
 \\usepackage{fontspec}
 \\usepackage{xeCJK}
-% 在Linux上, 请确保已安装 '${cjkFont}' 字体 (例如: sudo apt-get install fonts-noto-cjk), 或替换为其他可用中文字体
 \\setCJKmainfont{${cjkFont}}
-\\setmainfont{Latin Modern Roman}
+\\setmainfont{Times New Roman}
 ${backgroundSetup}
 \\begin{document}
 {${colorCommand} ${safeFormula}}
@@ -222,9 +221,11 @@ async function compileWithXeLaTeX(taskId, texContent) {
         '-file-line-error',
         texFilename
     ];
+    const commandString = `${CONFIG.xelatexPath} ${xelatexArgs.join(' ')}`;
 
     try {
         console.log(`🔧 正在编译 TeX -> PDF...`);
+        console.log(`🚀 执行命令: ${commandString}`);
 
         // 只编译一次，XeLaTeX通常不需要多次编译
         await executeCommand(CONFIG.xelatexPath, xelatexArgs, {
@@ -232,6 +233,9 @@ async function compileWithXeLaTeX(taskId, texContent) {
         });
 
     } catch (error) {
+        // 为错误附加命令信息，方便调试
+        error.command = commandString;
+
         // 读取日志获取错误信息
         const logFilePath = path.join(CONFIG.baseDir, `${taskId}.log`);
         try {
@@ -250,7 +254,8 @@ async function compileWithXeLaTeX(taskId, texContent) {
                 .join('\n');
 
             if (errorLines) {
-                throw new Error(`XeLaTeX编译错误:\n${errorLines}`);
+                // 将日志信息附加到原始错误
+                error.message += `\n\nXeLaTeX 日志关键信息:\n${errorLines}`;
             }
         } catch (logErr) {
             console.log(`⚠️ 无法读取日志文件: ${logErr.message}`);
@@ -685,7 +690,9 @@ async function renderLatex(formula, options = {}) {
         console.error(`❌ 渲染失败 ${taskId}: ${error.message}`);
         console.log(`🔍 临时文件保留: ${CONFIG.baseDir}/${taskId}.*`);
 
-        const enhancedError = new Error(`${error.message}\n\n调试信息：\n- 任务ID: ${taskId}\n- 公式: "${formula}"\n- 文件位置: ${CONFIG.baseDir}\n- XeLaTeX路径: ${CONFIG.xelatexPath}`);
+        const commandInfo = error.command ? `\n- 执行的命令: ${error.command}` : '';
+
+        const enhancedError = new Error(`${error.message}\n\n调试信息：\n- 任务ID: ${taskId}\n- 公式: "${formula}"${commandInfo}\n- 文件位置: ${CONFIG.baseDir}\n- XeLaTeX路径: ${CONFIG.xelatexPath}`);
         enhancedError.taskId = taskId;
 
         throw enhancedError;
