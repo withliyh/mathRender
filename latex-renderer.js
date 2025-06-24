@@ -54,8 +54,6 @@ function normalizeOptions(options = {}) {
  * @returns {string} 完整的XeLaTeX文档
  */
 function createXeLaTeXDocument(formula, options) {
-    console.log(`📄 使用原始公式：直接输出到文档`);
-
     // 直接使用原始公式，只做基本的安全转义（如果需要的话）
     const safeFormula = formula; // 保持原样，LaTeX应该能正确解析
 
@@ -64,9 +62,6 @@ function createXeLaTeXDocument(formula, options) {
     const backgroundSetup = isTransparent ?
         '' :  // 透明背景时不设置任何背景色，让standalone默认处理
         (options.backgroundColor ? `\\pagecolor{${options.backgroundColor}}` : '');
-
-    console.log(`📄 背景设置: ${isTransparent ? '透明(默认)' : options.backgroundColor || '默认'}`);
-    console.log(`🎨 字体颜色: ${options.color}`);
 
     // 处理颜色命令
     let colorCommand = '';
@@ -99,7 +94,6 @@ ${backgroundSetup}
 {${colorCommand} ${safeFormula}}
 \\end{document}`;
 
-    console.log(`📄 生成的文档内容: ${safeFormula}`);
     return document;
 }
 
@@ -109,7 +103,6 @@ ${backgroundSetup}
 async function ensureDir(dir) {
     try {
         await fs.mkdir(dir, { recursive: true });
-        console.log(`✓ 目录已确认: ${dir}`);
     } catch (err) {
         if (err.code !== 'EEXIST') {
             throw new Error(`创建目录失败: ${err.message}`);
@@ -178,7 +171,6 @@ async function checkXeLaTeXAvailable() {
     try {
         const fs = require('fs').promises;
         await fs.access(CONFIG.xelatexPath);
-        console.log(`✅ XeLaTeX可用: ${CONFIG.xelatexPath}`);
         return true;
     } catch (error) {
         console.error(`❌ XeLaTeX不可用: ${CONFIG.xelatexPath}`);
@@ -212,7 +204,7 @@ async function compileWithXeLaTeX(taskId, texContent) {
     ];
 
     try {
-        console.log(`🔧 使用XeLaTeX编译: ${CONFIG.xelatexPath}`);
+        console.log(`🔧 正在编译 TeX -> PDF...`);
 
         // 只编译一次，XeLaTeX通常不需要多次编译
         await executeCommand(CONFIG.xelatexPath, xelatexArgs, {
@@ -262,7 +254,6 @@ async function compileWithXeLaTeX(taskId, texContent) {
 async function checkImageMagickAvailable() {
     try {
         await fs.access(CONFIG.imageMagickPath);
-        console.log(`✅ ImageMagick可用: ${CONFIG.imageMagickPath}`);
         return true;
     } catch (error) {
         console.log(`⚠️ ImageMagick未找到: ${CONFIG.imageMagickPath}`);
@@ -277,8 +268,6 @@ async function checkImageMagickAvailable() {
  */
 async function getPdfDimensions(pdfPath) {
     try {
-        console.log(`📏 正在获取PDF尺寸: ${pdfPath}`);
-
         // 修正pdftocairo命令，添加必要的输出格式参数
         const result = await executeCommand(CONFIG.pdftocairoPath, [
             '-png',
@@ -288,9 +277,6 @@ async function getPdfDimensions(pdfPath) {
         ], {
             cwd: CONFIG.baseDir
         });
-
-        console.log(`📏 pdftocairo输出:`, result.stdout);
-        console.log(`📏 pdftocairo错误:`, result.stderr);
 
         // 尝试从stderr中解析PDF尺寸信息
         // pdftocairo通常会在stderr中输出页面信息
@@ -302,7 +288,7 @@ async function getPdfDimensions(pdfPath) {
                 width: parseFloat(sizeMatch[1]),
                 height: parseFloat(sizeMatch[2])
             };
-            console.log(`📏 解析到PDF尺寸: ${dimensions.width} x ${dimensions.height} 点`);
+            console.log(`📏 解析到PDF尺寸: ${dimensions.width.toFixed(1)} x ${dimensions.height.toFixed(1)} 点`);
 
             // 清理可能生成的1DPI图片
             const lowResPng = path.join(CONFIG.baseDir, path.basename(pdfPath, '.pdf') + '.png');
@@ -317,22 +303,19 @@ async function getPdfDimensions(pdfPath) {
 
         throw new Error('无法从pdftocairo输出中解析PDF尺寸信息');
     } catch (error) {
-        console.log(`⚠️ 无法获取PDF尺寸，将使用备用方法: ${error.message}`);
+        console.log(`⚠️ 无法获取PDF尺寸，尝试备用方法: ${error.message}`);
 
         // 备用方法：使用ImageMagick直接分析PDF
         if (await checkImageMagickAvailable()) {
             try {
-                console.log(`📏 备用方法：使用ImageMagick直接分析PDF`);
                 const identifyResult = await executeCommand(CONFIG.imageMagickPath, [
                     'identify', '-format', '%w %h', path.basename(pdfPath)
                 ], {
                     cwd: CONFIG.baseDir
                 });
 
-                console.log(`📏 ImageMagick identify PDF输出: ${identifyResult.stdout}`);
-
                 const [width, height] = identifyResult.stdout.trim().split(' ').map(Number);
-                console.log(`📏 PDF内在尺寸: ${width} x ${height} 点`);
+                console.log(`📏 (备用) PDF内在尺寸: ${width} x ${height} 点`);
 
                 return { width, height };
             } catch (identifyError) {
@@ -341,42 +324,31 @@ async function getPdfDimensions(pdfPath) {
         }
 
         // 最后的备用方法：通过PNG估算（修正计算方式）
-        console.log(`📏 最终备用方法：通过PNG估算尺寸`);
+        console.log(`📏 (备用) 通过PNG估算尺寸 (修剪模式)`);
         const tempTaskId = `temp_${Date.now()}`;
-        const tempPng = await convertPdfToPng(tempTaskId, pdfPath, 72, {});
 
         if (await checkImageMagickAvailable()) {
             try {
-                const pngFileName = await findGeneratedPngFile(tempTaskId);
-                console.log(`📏 查找生成的PNG文件: ${pngFileName}`);
+                // 调用convertPdfToPng并让它进行修剪，然后返回尺寸
+                const { width: pngWidth, height: pngHeight } = await convertPdfToPng(tempTaskId, pdfPath, 72, { trim: true });
 
-                const identifyResult = await executeCommand(CONFIG.imageMagickPath, [
-                    'identify', '-format', '%w %h', pngFileName
-                ], {
-                    cwd: CONFIG.baseDir
-                });
+                if (!pngWidth || !pngHeight) {
+                    throw new Error('PNG估算未能返回尺寸');
+                }
 
-                console.log(`📏 ImageMagick identify PNG输出: ${identifyResult.stdout}`);
-
-                const [pngWidth, pngHeight] = identifyResult.stdout.trim().split(' ').map(Number);
-                console.log(`📏 PNG尺寸: ${pngWidth} x ${pngHeight} 像素 (72 DPI)`);
-
-                // 正确的转换：72 DPI下，像素转点的公式是：点 = 像素 * 72 / DPI
-                // 由于我们用的是72 DPI，所以：点 = 像素 * 72 / 72 = 像素
-                // 但这不对！应该是：点 = 像素 / (DPI/72) = 像素 * 72 / DPI
-                // 在72 DPI下：点 = 像素
+                // 正确的转换：72 DPI下，像素即点
                 const dimensions = {
                     width: pngWidth,
                     height: pngHeight
                 };
-                console.log(`📏 转换为PDF点数: ${dimensions.width} x ${dimensions.height} 点`);
+                console.log(`📏 (备用) 转换为PDF点数 (已修剪): ${dimensions.width} x ${dimensions.height} 点`);
 
                 // 清理临时文件
                 await cleanupFiles(tempTaskId);
 
                 return dimensions;
-            } catch (identifyError) {
-                console.log(`⚠️ PNG估算方法也失败: ${identifyError.message}`);
+            } catch (estimationError) {
+                console.log(`⚠️ PNG估算方法失败: ${estimationError.message}`);
             }
         }
 
@@ -414,13 +386,10 @@ async function findGeneratedPngFile(taskId) {
  * @returns {number} 最优DPI值
  */
 function calculateOptimalDPI(actualSize, targetSize, baseDpi = 300) {
-    console.log(`🔢 开始DPI计算:`);
-    console.log(`🔢 - 实际PDF尺寸: ${actualSize.width} x ${actualSize.height} 点`);
-    console.log(`🔢 - 目标像素尺寸: ${targetSize.width || 'auto'} x ${targetSize.height || 'auto'} 像素`);
-    console.log(`🔢 - 基准DPI: ${baseDpi}`);
+    console.log(`🔢 计算DPI: PDF ${actualSize.width.toFixed(1)}x${actualSize.height.toFixed(1)}pt -> 目标 ${targetSize.width || 'auto'}x${targetSize.height || 'auto'}px`);
 
     if (!targetSize.width && !targetSize.height) {
-        console.log(`🔢 无目标尺寸，返回基准DPI: ${baseDpi}`);
+        console.log(`- 无目标尺寸，使用基准DPI: ${baseDpi}`);
         return baseDpi;
     }
 
@@ -432,69 +401,50 @@ function calculateOptimalDPI(actualSize, targetSize, baseDpi = 300) {
     // 这是最直接的转换公式：点转像素 = 点 * DPI / 72
     if (targetSize.width && actualSize.width > 0) {
         dpiX = (targetSize.width * 72) / actualSize.width;
-        console.log(`🔢 X轴计算: (${targetSize.width} * 72) / ${actualSize.width} = ${dpiX.toFixed(2)}`);
     }
 
     if (targetSize.height && actualSize.height > 0) {
         dpiY = (targetSize.height * 72) / actualSize.height;
-        console.log(`🔢 Y轴计算: (${targetSize.height} * 72) / ${actualSize.height} = ${dpiY.toFixed(2)}`);
     }
 
     // 如果同时指定了宽高，选择较小的DPI以确保图片不超出任何一个维度
     let optimalDpi;
     if (targetSize.width && targetSize.height) {
         optimalDpi = Math.min(dpiX, dpiY);
-        console.log(`🔢 同时指定宽高，选择较小值: min(${dpiX.toFixed(1)}, ${dpiY.toFixed(1)}) = ${optimalDpi.toFixed(1)}`);
     } else {
         optimalDpi = targetSize.width ? dpiX : dpiY;
-        console.log(`🔢 单向约束，使用: ${optimalDpi.toFixed(1)}`);
     }
 
     // 放宽DPI限制，允许更高的DPI以支持大尺寸输出
     const originalOptimalDpi = optimalDpi;
     optimalDpi = Math.max(50, Math.min(2400, optimalDpi)); // 从1200提高到2400
 
-    if (originalOptimalDpi !== optimalDpi) {
-        console.log(`🔢 DPI限制: ${originalOptimalDpi.toFixed(1)} -> ${optimalDpi.toFixed(1)} (范围: 50-2400)`);
+    if (originalOptimalDpi.toFixed(1) !== optimalDpi.toFixed(1)) {
+        console.log(`- DPI限制调整: ${originalOptimalDpi.toFixed(1)} -> ${optimalDpi.toFixed(1)}`);
     }
 
-    console.log(`🎯 最终DPI: ${optimalDpi.toFixed(1)}`);
-    console.log(`📐 验证计算:`);
-    if (targetSize.width) {
-        const resultWidth = (actualSize.width * optimalDpi / 72);
-        console.log(`📐 - 宽度: ${actualSize.width.toFixed(1)}点 * ${optimalDpi.toFixed(1)}DPI / 72 = ${resultWidth.toFixed(1)}像素 (目标: ${targetSize.width})`);
-    }
-    if (targetSize.height) {
-        const resultHeight = (actualSize.height * optimalDpi / 72);
-        console.log(`📐 - 高度: ${actualSize.height.toFixed(1)}点 * ${optimalDpi.toFixed(1)}DPI / 72 = ${resultHeight.toFixed(1)}像素 (目标: ${targetSize.height})`);
-    }
+    const finalDpi = Math.round(optimalDpi);
+    console.log(`- 最终DPI: ${finalDpi}`);
 
-    return Math.round(optimalDpi);
+    return finalDpi;
 }
 
 /**
  * 转换PDF为PNG
  */
 async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
-    const { width = null, height = null, padding = 0, scale = 1, backgroundColor = 'transparent' } = options;
+    const { width = null, height = null, padding = 0, scale = 1, backgroundColor = 'transparent', trim = false } = options;
     const pdfFilename = path.basename(pdfPath);
-
-    console.log(`🖼️ 开始PDF转PNG:`);
-    console.log(`🖼️ - 任务ID: ${taskId}`);
-    console.log(`🖼️ - PDF文件: ${pdfFilename}`);
-    console.log(`🖼️ - DPI: ${dpi}`);
-    console.log(`🖼️ - 选项: width=${width}, height=${height}, padding=${padding}, scale=${scale}, backgroundColor=${backgroundColor}`);
 
     let adjustedDpi = dpi;
     if (scale !== 1) {
         adjustedDpi = Math.round(dpi * scale);
-        console.log(`🖼️ - 调整后DPI (scale=${scale}): ${adjustedDpi}`);
     }
+    console.log(`🖼️ PDF->PNG [${taskId}]: DPI=${adjustedDpi} (scale=${scale})`);
 
     // 检查pdftocairo是否可用
     try {
         await fs.access(CONFIG.pdftocairoPath);
-        console.log(`✅ pdftocairo可用: ${CONFIG.pdftocairoPath}`);
     } catch (error) {
         throw new Error(`pdftocairo未找到，请确认TeX Live已正确安装在: ${CONFIG.pdftocairoPath}`);
     }
@@ -506,12 +456,9 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
     // 如果需要透明背景，添加透明参数
     if (backgroundColor === 'transparent') {
         pdftocairoArgs.push('-transp');
-        console.log(`🖼️ 启用透明背景模式`);
     }
 
     pdftocairoArgs.push(pdfFilename, pngBaseFilename);
-
-    console.log(`🖼️ 执行pdftocairo: ${pdftocairoArgs.join(' ')}`);
 
     await executeCommand(CONFIG.pdftocairoPath, pdftocairoArgs, {
         cwd: CONFIG.baseDir
@@ -527,49 +474,25 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
     for (const pngPath of possiblePngFiles) {
         if (await fileExists(pngPath)) {
             sourcePngPath = pngPath;
-            console.log(`🖼️ 找到生成的PNG: ${path.basename(pngPath)}`);
             break;
         }
     }
 
     if (!sourcePngPath) {
-        console.error(`🖼️ 未找到任何PNG文件:`);
-        for (const pngPath of possiblePngFiles) {
-            console.error(`🖼️ - 检查: ${pngPath}`);
-        }
         throw new Error('PNG文件未生成');
-    }
-
-    // 使用ImageMagick获取实际生成的图片尺寸
-    if (await checkImageMagickAvailable()) {
-        try {
-            const identifyResult = await executeCommand(CONFIG.imageMagickPath, [
-                'identify', '-format', '%w %h', path.basename(sourcePngPath)
-            ], {
-                cwd: CONFIG.baseDir
-            });
-
-            const [actualWidth, actualHeight] = identifyResult.stdout.trim().split(' ').map(Number);
-            console.log(`🖼️ 实际生成的PNG尺寸: ${actualWidth} x ${actualHeight} 像素`);
-        } catch (identifyError) {
-            console.log(`🖼️ 无法获取PNG尺寸: ${identifyError.message}`);
-        }
     }
 
     let finalPngPath = sourcePngPath;
 
     // 检查是否需要后处理
-    const needsPostProcessing = width || height || padding > 0;
+    const needsPostProcessing = width || height || padding > 0 || trim;
 
     if (needsPostProcessing) {
-        console.log(`🖼️ 需要后处理: width=${width}, height=${height}, padding=${padding}`);
-        // 检查 ImageMagick 是否可用
+        console.log(`- ImageMagick后处理: width=${width}, height=${height}, padding=${padding}, trim=${trim}`);
         const isImageMagickAvailable = await checkImageMagickAvailable();
 
         if (!isImageMagickAvailable) {
-            console.log(`⚠️ ImageMagick 未安装，跳过后处理 (width: ${width}, height: ${height}, padding: ${padding})`);
-            console.log(`💡 如需调整图片尺寸和边距，请确认 ImageMagick 已安装在: ${CONFIG.imageMagickPath}`);
-            console.log(`💡 或从以下地址下载安装: https://imagemagick.org/script/download.php#windows`);
+            console.log(`⚠️ ImageMagick 未安装，跳过后处理`);
         } else {
             try {
                 const outputFilename = `${taskId}_processed.png`;
@@ -582,53 +505,53 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
                 // 处理尺寸调整
                 if (width && !height) {
                     convertArgs.push('-resize', `${Math.round(width * scale)}x`);
-                    console.log(`🔧 调整宽度为: ${Math.round(width * scale)}px`);
                 } else if (!width && height) {
                     convertArgs.push('-resize', `x${Math.round(height * scale)}`);
-                    console.log(`🔧 调整高度为: ${Math.round(height * scale)}px`);
                 } else if (width && height) {
                     convertArgs.push('-resize', `${Math.round(width * scale)}x${Math.round(height * scale)}!`);
-                    console.log(`🔧 调整尺寸为: ${Math.round(width * scale)}x${Math.round(height * scale)}px (强制)`);
                 }
 
                 // 处理内边距
                 if (padding > 0) {
                     convertArgs.push('-bordercolor', 'transparent');
                     convertArgs.push('-border', `${padding}`);
-                    console.log(`🔧 添加内边距: ${padding}px`);
                 }
 
                 convertArgs.push(outputFilename);
 
-                // 使用绝对路径调用 ImageMagick
                 await executeCommand(CONFIG.imageMagickPath, convertArgs, {
                     cwd: CONFIG.baseDir
                 });
 
                 if (await fileExists(outputPath)) {
                     finalPngPath = outputPath;
-                    console.log(`✅ ImageMagick后处理完成`);
+                    console.log(`- ImageMagick后处理完成`);
                 }
             } catch (error) {
                 console.log(`⚠️ ImageMagick后处理失败，使用原始图像: ${error.message}`);
-                console.log(`💡 原始图像仍可正常使用，只是无法应用自定义尺寸和边距`);
-
-                // 如果是路径问题，提供更详细的错误信息
-                if (error.message.includes('ENOENT') || error.message.includes('spawn')) {
-                    console.log(`🔍 请检查 ImageMagick 安装路径是否正确: ${CONFIG.imageMagickPath}`);
-                    console.log(`🔍 可以尝试在命令提示符中运行: "${CONFIG.imageMagickPath}" -version`);
-                }
             }
         }
-    } else {
-        console.log(`🖼️ 跳过后处理`);
     }
 
     const stats = await fs.stat(finalPngPath);
     const pngBuffer = await fs.readFile(finalPngPath);
-    console.log(`✅ PNG生成完成 (${stats.size} bytes)`);
 
-    return pngBuffer;
+    let finalWidth = null, finalHeight = null;
+    if (await checkImageMagickAvailable()) {
+        try {
+            const identifyResult = await executeCommand(CONFIG.imageMagickPath, [
+                'identify', '-format', '%w %h', path.basename(finalPngPath)
+            ], { cwd: CONFIG.baseDir });
+            [finalWidth, finalHeight] = identifyResult.stdout.trim().split(' ').map(Number);
+            console.log(`- 最终PNG尺寸: ${finalWidth}x${finalHeight}px, ${stats.size} bytes`);
+        } catch (e) {
+            console.log(`⚠️ 无法识别最终PNG尺寸: ${e.message}`);
+        }
+    } else {
+        console.log(`- 最终PNG: ${stats.size} bytes (尺寸未知)`);
+    }
+
+    return { buffer: pngBuffer, width: finalWidth, height: finalHeight };
 }
 
 /**
@@ -657,37 +580,46 @@ async function cleanupFiles(taskId) {
  * @returns {Promise<Buffer>} PNG图片数据
  */
 async function renderWithPreciseSize(taskId, texContent, options) {
-    const { width, height, dpi: requestedDpi = 300 } = options;
+    const { width, height, dpi: requestedDpi = 300, scale = 1 } = options;
 
     // 如果没有指定尺寸，使用传统单步渲染
     if (!width && !height) {
         console.log(`📐 使用传统渲染 (DPI: ${requestedDpi})`);
         const pdfPath = await compileWithXeLaTeX(taskId, texContent);
-        return await convertPdfToPng(taskId, pdfPath, requestedDpi, options);
+        const result = await convertPdfToPng(taskId, pdfPath, requestedDpi, options);
+        return result.buffer;
     }
 
-    console.log(`📐 使用两步渲染法，目标尺寸: ${width || 'auto'}x${height || 'auto'}`);
+    console.log(`📐 使用两步渲染法，目标尺寸: ${width || 'auto'}x${height || 'auto'}, 缩放: ${scale}`);
 
     // 第一步：使用默认DPI渲染，获取实际尺寸
-    console.log(`📐 第一步：获取实际尺寸 (DPI: ${requestedDpi})`);
+    console.log(`- 步骤1: 获取PDF实际尺寸 (基准DPI: ${requestedDpi})`);
     const firstTaskId = `${taskId}_step1`;
     const pdfPath = await compileWithXeLaTeX(firstTaskId, texContent);
     const actualSize = await getPdfDimensions(pdfPath);
 
-    console.log(`📏 实际PDF尺寸: ${actualSize.width.toFixed(1)} x ${actualSize.height.toFixed(1)} 点`);
+    // 计算最终的目标像素尺寸，应用缩放因子
+    const targetPixelWidth = width ? Math.round(width * scale) : null;
+    const targetPixelHeight = height ? Math.round(height * scale) : null;
 
     // 第二步：计算最优DPI并重新渲染
-    const optimalDpi = calculateOptimalDPI(actualSize, { width, height }, requestedDpi);
+    const optimalDpi = calculateOptimalDPI(actualSize, { width: targetPixelWidth, height: targetPixelHeight }, requestedDpi);
 
-    console.log(`📐 第二步：精确渲染 (DPI: ${optimalDpi})`);
+    console.log(`- 步骤2: 精确渲染 (计算DPI: ${optimalDpi})`);
     const secondTaskId = `${taskId}_step2`;
     const finalPdfPath = await compileWithXeLaTeX(secondTaskId, texContent);
-    const finalPng = await convertPdfToPng(secondTaskId, finalPdfPath, optimalDpi, {
+    const { buffer: finalPng, width: actualWidth, height: actualHeight } = await convertPdfToPng(secondTaskId, finalPdfPath, optimalDpi, {
         ...options,
         // 禁用ImageMagick的强制resize，因为我们已经通过DPI精确控制了
         width: null,
-        height: null
+        height: null,
+        // 禁用缩放，因为DPI计算已包含缩放因子
+        scale: 1
     });
+
+    console.log(`📊 尺寸对比:`);
+    console.log(`- 目标: ${targetPixelWidth || 'auto'} x ${targetPixelHeight || 'auto'} px`);
+    console.log(`- 实际: ${actualWidth || 'N/A'} x ${actualHeight || 'N/A'} px`);
 
     // 清理第一步的临时文件
     await cleanupFiles(firstTaskId);
@@ -713,13 +645,14 @@ async function renderLatex(formula, options = {}) {
         const texContent = createXeLaTeXDocument(formula, normalizedOptions);
 
         // 2. 根据是否需要精确尺寸控制选择渲染方法
-        let png;
+        let pngBuffer;
         if (normalizedOptions.width || normalizedOptions.height) {
-            png = await renderWithPreciseSize(taskId, texContent, normalizedOptions);
+            pngBuffer = await renderWithPreciseSize(taskId, texContent, normalizedOptions);
         } else {
             // 传统渲染方法
             const pdfPath = await compileWithXeLaTeX(taskId, texContent);
-            png = await convertPdfToPng(taskId, pdfPath, normalizedOptions.dpi, normalizedOptions);
+            const result = await convertPdfToPng(taskId, pdfPath, normalizedOptions.dpi, normalizedOptions);
+            pngBuffer = result.buffer;
         }
 
         console.log(`✅ 渲染成功: ${taskId}`);
@@ -728,7 +661,7 @@ async function renderLatex(formula, options = {}) {
         await cleanupFiles(taskId);
 
         return {
-            content: png,
+            content: pngBuffer,
             contentType: CONFIG.formats.png.contentType
         };
 
