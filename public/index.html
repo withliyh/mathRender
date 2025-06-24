@@ -264,12 +264,6 @@
             </div>
 
             <div class="form-group">
-                <label for="dpi">解析度 (DPI):</label>
-                <input type="number" id="dpi" min="72" max="600" step="1" value="300">
-                <div class="info-text">只影响PNG输出，更高的值生成更大、更清晰的图像</div>
-            </div>
-
-            <div class="form-group">
                 <label for="fontSize">字体大小:</label>
                 <select id="fontSize">
                     <option value="">默认</option>
@@ -500,7 +494,6 @@
                     • <strong>字体大小:</strong> 尝试不同的fontSize值 (8-25)<br>
                     • <strong>颜色:</strong> 修改文本颜色和背景颜色<br>
                     • <strong>尺寸:</strong> 设置width/height测试自适应<br>
-                    • <strong>分辨率:</strong> 调整DPI值 (72-600)<br>
                     • <strong>内边距:</strong> 修改padding值观察效果<br><br>
                     <strong>注意:</strong> 宽度/高度/内边距调整需要 <a href="https://imagemagick.org/script/download.php#windows"
                         target="_blank">ImageMagick</a> 支持<br>
@@ -514,7 +507,6 @@
                 const formulaInput = document.getElementById('formula');
                 const colorInput = document.getElementById('color');
                 const backgroundColorInput = document.getElementById('backgroundColor');
-                const dpiInput = document.getElementById('dpi');
                 const fontSizeSelect = document.getElementById('fontSize');
                 const widthInput = document.getElementById('width');
                 const heightInput = document.getElementById('height');
@@ -591,7 +583,6 @@
                     try {
                         const color = colorInput.value;
                         const backgroundColor = backgroundColorInput.value === '#ffffff' ? 'transparent' : backgroundColorInput.value;
-                        const dpi = dpiInput.value;
                         const fontSize = fontSizeSelect.value;
                         const width = widthInput.value.trim() ? parseInt(widthInput.value.trim()) : null;
                         const height = heightInput.value.trim() ? parseInt(heightInput.value.trim()) : null;
@@ -606,7 +597,6 @@
                             formula,
                             color,
                             backgroundColor,
-                            dpi,
                             padding
                         };
 

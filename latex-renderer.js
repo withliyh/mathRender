@@ -19,7 +19,7 @@ const PATHS = {
         // Linux下的临时目录
         baseDir: path.join(os.tmpdir(), 'textemp'),
         // Linux下, 假定这些工具在系统PATH中。如果不在, 请修改为绝对路径。
-        xelatexPath: 'xelatex',
+        xelatexPath: '/usr/local/texlive/2025/bin/x86_64-linux/xelatex',
         pdftocairoPath: 'pdftocairo',
         imageMagickPath: 'magick',
     }
@@ -45,7 +45,6 @@ function normalizeOptions(options = {}) {
     const normalized = {
         // 输出格式
         format: 'png',
-        dpi: parseInt(options.dpi) || 300,
 
         // 外观设置
         color: options.color || 'black',
@@ -56,8 +55,7 @@ function normalizeOptions(options = {}) {
         display: options.display === 'false' ? false : (options.display === 'true' || options.display === true || options.display === undefined),
         width: options.width ? parseInt(options.width) : null,
         height: options.height ? parseInt(options.height) : null,
-        padding: parseInt(options.padding) || 0, // 默认无边框
-        scale: parseFloat(options.scale) || 1
+        padding: parseInt(options.padding) || 0 // 默认无边框
     };
 
     return normalized;
@@ -457,14 +455,11 @@ function calculateOptimalDPI(actualSize, targetSize, baseDpi = 300) {
  * 转换PDF为PNG
  */
 async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
-    const { width = null, height = null, padding = 0, scale = 1, backgroundColor = 'transparent', trim = false } = options;
+    const { width = null, height = null, padding = 0, backgroundColor = 'transparent', trim = false } = options;
     const pdfFilename = path.basename(pdfPath);
 
-    let adjustedDpi = dpi;
-    if (scale !== 1) {
-        adjustedDpi = Math.round(dpi * scale);
-    }
-    console.log(`🖼️ PDF->PNG [${taskId}]: DPI=${adjustedDpi} (scale=${scale})`);
+    const adjustedDpi = dpi;
+    console.log(`🖼️ PDF->PNG [${taskId}]: DPI=${adjustedDpi}`);
 
     // 检查pdftocairo是否可用
     if (!await checkPdftocairoAvailable()) {
@@ -517,11 +512,11 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
 
                 // 处理尺寸调整
                 if (width && !height) {
-                    convertArgs.push('-resize', `${Math.round(width * scale)}x`);
+                    convertArgs.push('-resize', `${width}x`);
                 } else if (!width && height) {
-                    convertArgs.push('-resize', `x${Math.round(height * scale)}`);
+                    convertArgs.push('-resize', `x${height}`);
                 } else if (width && height) {
-                    convertArgs.push('-resize', `${Math.round(width * scale)}x${Math.round(height * scale)}!`);
+                    convertArgs.push('-resize', `${width}x${height}!`);
                 }
 
                 // 处理内边距
@@ -590,33 +585,34 @@ async function cleanupFiles(taskId) {
  * @param {string} taskId - 任务ID
  * @param {string} texContent - LaTeX内容
  * @param {Object} options - 渲染选项
+ * @param {number} baseDpi - 基础DPI
  * @returns {Promise<Buffer>} PNG图片数据
  */
-async function renderWithPreciseSize(taskId, texContent, options) {
-    const { width, height, dpi: requestedDpi = 300, scale = 1 } = options;
+async function renderWithPreciseSize(taskId, texContent, options, baseDpi) {
+    const { width, height } = options;
 
     // 如果没有指定尺寸，使用传统单步渲染
     if (!width && !height) {
-        console.log(`📐 使用传统渲染 (DPI: ${requestedDpi})`);
+        console.log(`📐 使用传统渲染 (DPI: ${baseDpi})`);
         const pdfPath = await compileWithXeLaTeX(taskId, texContent);
-        const result = await convertPdfToPng(taskId, pdfPath, requestedDpi, options);
+        const result = await convertPdfToPng(taskId, pdfPath, baseDpi, options);
         return result.buffer;
     }
 
-    console.log(`📐 使用两步渲染法，目标尺寸: ${width || 'auto'}x${height || 'auto'}, 缩放: ${scale}`);
+    console.log(`📐 使用两步渲染法，目标尺寸: ${width || 'auto'}x${height || 'auto'}`);
 
     // 第一步：使用默认DPI渲染，获取实际尺寸
-    console.log(`- 步骤1: 获取PDF实际尺寸 (基准DPI: ${requestedDpi})`);
+    console.log(`- 步骤1: 获取PDF实际尺寸 (基准DPI: ${baseDpi})`);
     const firstTaskId = `${taskId}_step1`;
     const pdfPath = await compileWithXeLaTeX(firstTaskId, texContent);
     const actualSize = await getPdfDimensions(pdfPath);
 
-    // 计算最终的目标像素尺寸，应用缩放因子
-    const targetPixelWidth = width ? Math.round(width * scale) : null;
-    const targetPixelHeight = height ? Math.round(height * scale) : null;
+    // 计算最终的目标像素尺寸
+    const targetPixelWidth = width;
+    const targetPixelHeight = height;
 
     // 第二步：计算最优DPI并重新渲染
-    const optimalDpi = calculateOptimalDPI(actualSize, { width: targetPixelWidth, height: targetPixelHeight }, requestedDpi);
+    const optimalDpi = calculateOptimalDPI(actualSize, { width: targetPixelWidth, height: targetPixelHeight }, baseDpi);
 
     console.log(`- 步骤2: 精确渲染 (计算DPI: ${optimalDpi})`);
     const secondTaskId = `${taskId}_step2`;
@@ -626,8 +622,6 @@ async function renderWithPreciseSize(taskId, texContent, options) {
         // 禁用ImageMagick的强制resize，因为我们已经通过DPI精确控制了
         width: null,
         height: null,
-        // 禁用缩放，因为DPI计算已包含缩放因子
-        scale: 1,
         // 在精确尺寸模式下，始终进行修剪以与估算步骤保持一致
         trim: true
     });
@@ -652,6 +646,7 @@ async function renderWithPreciseSize(taskId, texContent, options) {
 async function renderLatex(formula, options = {}) {
     const taskId = generateTaskId();
     const normalizedOptions = normalizeOptions(options);
+    const DEFAULT_DPI = 300;
 
     console.log(`🚀 渲染任务 ${taskId}: "${formula.substring(0, 50)}${formula.length > 50 ? '...' : ''}"`);
 
@@ -662,11 +657,11 @@ async function renderLatex(formula, options = {}) {
         // 2. 根据是否需要精确尺寸控制选择渲染方法
         let pngBuffer;
         if (normalizedOptions.width || normalizedOptions.height) {
-            pngBuffer = await renderWithPreciseSize(taskId, texContent, normalizedOptions);
+            pngBuffer = await renderWithPreciseSize(taskId, texContent, normalizedOptions, DEFAULT_DPI);
         } else {
             // 传统渲染方法
             const pdfPath = await compileWithXeLaTeX(taskId, texContent);
-            const result = await convertPdfToPng(taskId, pdfPath, normalizedOptions.dpi, normalizedOptions);
+            const result = await convertPdfToPng(taskId, pdfPath, DEFAULT_DPI, normalizedOptions);
             pngBuffer = result.buffer;
         }
 
