@@ -66,8 +66,10 @@ app.get('/health', (req, res) => {
 });
 
 // 启动服务器
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 数学公式渲染服务已启动`);
+    console.log(`✅ 服务正在监听: 0.0.0.0:${port}`);
     console.log(`📍 本地访问: http://localhost:${port}`);
+    console.log(`LAN 访问: (请使用您的内网IP)`);
     console.log(`📊 健康检查: http://localhost:${port}/health`);
 });
