@@ -2,16 +2,32 @@ const { spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
-const { parseFormula, processFormula } = require('./formula-parser');
+const os = require('os');
 
 // 配置
+const platform = process.platform;
+
+const PATHS = {
+    win32: {
+        baseDir: 'C:/textemp',
+        // Windows平台上工具的绝对路径
+        xelatexPath: 'C:/texlive/2025/bin/windows/xelatex.exe',
+        pdftocairoPath: 'C:/texlive/2025/bin/windows/pdftocairo.exe',
+        imageMagickPath: 'C:/Program Files/ImageMagick-7.1.1-Q16/magick.exe',
+    },
+    linux: {
+        // Linux下的临时目录
+        baseDir: path.join(os.tmpdir(), 'textemp'),
+        // Linux下, 假定这些工具在系统PATH中。如果不在, 请修改为绝对路径。
+        xelatexPath: 'xelatex',
+        pdftocairoPath: 'pdftocairo',
+        imageMagickPath: 'magick',
+    }
+};
+
+// 根据当前平台选择配置，默认为linux
 const CONFIG = {
-    baseDir: 'C:/textemp',
-    // Windows平台上XeLaTeX的绝对路径
-    xelatexPath: 'C:/texlive/2025/bin/windows/xelatex.exe',
-    pdftocairoPath: 'C:/texlive/2025/bin/windows/pdftocairo.exe',
-    // ImageMagick的绝对路径
-    imageMagickPath: 'C:/Program Files/ImageMagick-7.1.1-Q16/magick.exe',
+    ...(PATHS[platform] || PATHS.linux),
     formats: {
         png: {
             contentType: 'image/png',
@@ -169,11 +185,11 @@ function executeCommand(command, args, options = {}) {
  */
 async function checkXeLaTeXAvailable() {
     try {
-        const fs = require('fs').promises;
-        await fs.access(CONFIG.xelatexPath);
+        // 使用 --version 命令检查工具是否可用
+        await executeCommand(CONFIG.xelatexPath, ['--version']);
         return true;
     } catch (error) {
-        console.error(`❌ XeLaTeX不可用: ${CONFIG.xelatexPath}`);
+        console.error(`❌ XeLaTeX不可用: ${CONFIG.xelatexPath}. 请确保它已安装并且在系统的PATH中，或者在脚本中配置了正确的绝对路径。`);
         return false;
     }
 }
@@ -253,10 +269,24 @@ async function compileWithXeLaTeX(taskId, texContent) {
  */
 async function checkImageMagickAvailable() {
     try {
-        await fs.access(CONFIG.imageMagickPath);
+        // ImageMagick 7+ 推荐使用 'magick' 命令
+        await executeCommand(CONFIG.imageMagickPath, ['-version']);
         return true;
     } catch (error) {
-        console.log(`⚠️ ImageMagick未找到: ${CONFIG.imageMagickPath}`);
+        console.log(`⚠️ ImageMagick不可用: ${CONFIG.imageMagickPath}. 后处理功能（如padding, trim）将不可用。`);
+        return false;
+    }
+}
+
+/**
+ * 检查 pdftocairo 是否可用
+ */
+async function checkPdftocairoAvailable() {
+    try {
+        await executeCommand(CONFIG.pdftocairoPath, ['-v']);
+        return true;
+    } catch (error) {
+        console.error(`❌ pdftocairo不可用: ${CONFIG.pdftocairoPath}.`);
         return false;
     }
 }
@@ -362,20 +392,14 @@ async function getPdfDimensions(pdfPath) {
  * 查找生成的PNG文件名
  */
 async function findGeneratedPngFile(taskId) {
-    const possibleFiles = [
-        `${taskId}-1.png`,
-        `${taskId}.png`
-    ];
-
-    for (const fileName of possibleFiles) {
-        const filePath = path.join(CONFIG.baseDir, fileName);
+    const possibleNames = [`${taskId}-1.png`, `${taskId}.png`];
+    for (const name of possibleNames) {
+        const filePath = path.join(CONFIG.baseDir, name);
         if (await fileExists(filePath)) {
-            console.log(`📏 找到PNG文件: ${fileName}`);
-            return fileName;
+            return filePath;
         }
     }
-
-    throw new Error(`未找到任何PNG文件: ${possibleFiles.join(', ')}`);
+    return null;
 }
 
 /**
@@ -443,10 +467,8 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
     console.log(`🖼️ PDF->PNG [${taskId}]: DPI=${adjustedDpi} (scale=${scale})`);
 
     // 检查pdftocairo是否可用
-    try {
-        await fs.access(CONFIG.pdftocairoPath);
-    } catch (error) {
-        throw new Error(`pdftocairo未找到，请确认TeX Live已正确安装在: ${CONFIG.pdftocairoPath}`);
+    if (!await checkPdftocairoAvailable()) {
+        throw new Error(`pdftocairo不可用，请确认Poppler工具集已正确安装，并且路径 '${CONFIG.pdftocairoPath}' 可访问。`);
     }
 
     // 构建pdftocairo命令参数
@@ -465,21 +487,10 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
     });
 
     // 查找生成的PNG文件
-    const possiblePngFiles = [
-        path.join(CONFIG.baseDir, `${taskId}-1.png`),
-        path.join(CONFIG.baseDir, `${taskId}.png`)
-    ];
-
-    let sourcePngPath = null;
-    for (const pngPath of possiblePngFiles) {
-        if (await fileExists(pngPath)) {
-            sourcePngPath = pngPath;
-            break;
-        }
-    }
+    const sourcePngPath = await findGeneratedPngFile(taskId);
 
     if (!sourcePngPath) {
-        throw new Error('PNG文件未生成');
+        throw new Error(`PNG文件未生成 for task ${taskId}`);
     }
 
     let finalPngPath = sourcePngPath;
@@ -499,8 +510,10 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
                 const outputPath = path.join(CONFIG.baseDir, outputFilename);
                 const convertArgs = ['convert', path.basename(sourcePngPath)];
 
-                // 先修剪空白边缘
-                convertArgs.push('-trim', '+repage');
+                // 根据选项决定是否修剪
+                if (trim) {
+                    convertArgs.push('-trim', '+repage');
+                }
 
                 // 处理尺寸调整
                 if (width && !height) {
@@ -614,7 +627,9 @@ async function renderWithPreciseSize(taskId, texContent, options) {
         width: null,
         height: null,
         // 禁用缩放，因为DPI计算已包含缩放因子
-        scale: 1
+        scale: 1,
+        // 在精确尺寸模式下，始终进行修剪以与估算步骤保持一致
+        trim: true
     });
 
     console.log(`📊 尺寸对比:`);
