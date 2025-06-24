@@ -19,7 +19,7 @@ const PATHS = {
         // Linux下的临时目录
         baseDir: path.join(os.tmpdir(), 'textemp'),
         // Linux下, 假定这些工具在系统PATH中。如果不在, 请修改为绝对路径。
-        xelatexPath: '/usr/local/texlive/2025/bin/x86_64-linux/xelatex',
+        xelatexPath: 'xelatex',
         pdftocairoPath: 'pdftocairo',
         imageMagickPath: 'magick',
     }
@@ -91,6 +91,11 @@ function createXeLaTeXDocument(formula, options) {
         }
     }
 
+    // 根据平台选择中文字体
+    const cjkFont = process.platform === 'win32'
+        ? 'SimSun' // Windows下的默认中文字体
+        : 'Noto Sans CJK SC'; // Linux下的推荐中文字体, 或 'WenQuanYi Zen Hei'
+
     // 生成XeLaTeX文档 - 支持Unicode和中文
     const document = `\\documentclass[border=2pt,varwidth]{standalone}
 \\usepackage{amsmath}
@@ -101,7 +106,8 @@ function createXeLaTeXDocument(formula, options) {
 \\usepackage{chemmacros}
 \\usepackage{fontspec}
 \\usepackage{xeCJK}
-\\setCJKmainfont{SimSun}
+% 在Linux上, 请确保已安装 '${cjkFont}' 字体 (例如: sudo apt-get install fonts-noto-cjk), 或替换为其他可用中文字体
+\\setCJKmainfont{${cjkFont}}
 \\setmainfont{Latin Modern Roman}
 ${backgroundSetup}
 \\begin{document}
