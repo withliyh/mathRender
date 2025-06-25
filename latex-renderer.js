@@ -542,17 +542,14 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
                     convertArgs.push('-resize', `${width}x${height}!`);
                 }
 
-                // 步骤3: 添加内边距 (使用正确的方法)
+                // 步骤3: 添加内边距 (使用更稳定可靠的 -border 命令)
                 if (padding > 0) {
                     if (backgroundColor === 'transparent') {
-                        // 对于透明背景，-extent 是最可靠的方法
-                        // 它会创建一个新的透明画布，并将原图居中放置
-                        convertArgs.push('-background', 'transparent');
-                        convertArgs.push('-gravity', 'center');
-                        const extentSize = `%[fx:w+${padding * 2}]x%[fx:h+${padding * 2}]`;
-                        convertArgs.push('-extent', extentSize);
+                        // 对于透明背景, 使用 'none' 作为边框颜色即可添加透明边距
+                        convertArgs.push('-bordercolor', 'none');
+                        convertArgs.push('-border', `${padding}`);
                     } else {
-                        // 对于有颜色的背景，-border 更简单
+                        // 对于有颜色的背景, 使用其自身颜色作为边框颜色
                         convertArgs.push('-bordercolor', backgroundColor);
                         convertArgs.push('-border', `${padding}`);
                     }
