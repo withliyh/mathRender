@@ -499,6 +499,36 @@
                         target="_blank">ImageMagick</a> 支持<br>
                     <small>当前配置路径: <code>C:\Program Files\ImageMagick-7.1.1-Q16\magick.exe</code></small>
                 </div>
+
+                <div class="category-header">直接图片接口示例</div>
+                <div
+                    style="background-color: #f0f8ff; padding: 15px; margin: 15px 0; border-radius: 4px; border: 1px solid #b0d4ff;">
+                    <strong>🖼️ 直接显示图片接口：</strong><br><br>
+
+                    <strong>示例URL（可直接在浏览器中打开）：</strong><br>
+                    <code
+                        style="background-color: #e8e8e8; padding: 5px; border-radius: 3px; display: block; margin: 5px 0;">
+                        /api/render-direct?formula=%24E%3Dmc%5E2%24
+                    </code>
+
+                    <strong>带颜色和尺寸：</strong><br>
+                    <code
+                        style="background-color: #e8e8e8; padding: 5px; border-radius: 3px; display: block; margin: 5px 0;">
+                        /api/render-direct?formula=%24%5Cfrac%7B1%7D%7Bx%7D%24&color=%23FF0000&width=200
+                    </code>
+
+                    <strong>HTML嵌入示例：</strong><br>
+                    <code
+                        style="background-color: #e8e8e8; padding: 5px; border-radius: 3px; display: block; margin: 5px 0;">
+                        &lt;img src="/api/render-direct?formula=%24E%3Dmc%5E2%24" alt="Einstein's equation"&gt;
+                    </code>
+
+                    <br><strong>💡 提示：</strong>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li><code>/api/render</code> - 下载图片文件</li>
+                        <li><code>/api/render-direct</code> - 浏览器中直接显示</li>
+                    </ul>
+                </div>
         </div>
 
         <script>

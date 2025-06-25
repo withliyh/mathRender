@@ -45,11 +45,51 @@ async function handleRender(req, res) {
     }
 }
 
+/**
+ * 直接返回图片的渲染处理函数
+ */
+async function handleRenderDirect(req, res) {
+    try {
+        const params = req.method === 'GET' ? req.query : req.body;
+        const { formula, ...options } = params;
+
+        if (!formula) {
+            return res.status(400).json({ error: '缺少公式参数' });
+        }
+
+        const result = await latexRenderer.renderLatex(formula, options);
+
+        // 设置直接显示图片的响应头
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Content-Disposition', 'inline'); // 关键：inline而不是attachment
+        res.setHeader('Cache-Control', 'public, max-age=3600'); // 缓存1小时
+
+        // 直接返回图片数据
+        return res.send(result.content);
+
+    } catch (error) {
+        console.error('渲染错误:', error);
+
+        // 对于直接图片接口，我们返回一个错误图片或重定向到错误页面
+        // 这里选择返回JSON错误信息
+        const errorResponse = {
+            error: error.message || '渲染失败',
+            taskId: error.taskId || '未知'
+        };
+
+        res.status(500).json(errorResponse);
+    }
+}
+
 // API路由
 app.get('/api/render', handleRender);
 app.post('/api/render', handleRender);
 app.get('/api/render-complex', handleRender); // 向后兼容
 app.post('/api/render-complex', handleRender); // 向后兼容
+
+// 新增：直接返回图片的接口
+app.get('/api/render-direct', handleRenderDirect);
+app.post('/api/render-direct', handleRenderDirect);
 
 // 页面路由
 app.get('/', (req, res) => {

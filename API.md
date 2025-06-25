@@ -35,7 +35,32 @@ Content-Type: application/json
 }
 ```
 
+### 直接返回图片（浏览器显示）
+
+将LaTeX格式的数学公式渲染为PNG图像，直接在浏览器中显示。
+
+#### 请求
+
+**GET /api/render-direct**
+
+```
+GET /api/render-direct?formula=%24E%3Dmc%5E2%24
+```
+
+**POST /api/render-direct**
+
+```
+POST /api/render-direct
+Content-Type: application/json
+
+{
+  "formula": "$E = mc^2$"
+}
+```
+
 #### 参数
+
+两个接口使用相同的参数：
 
 | 参数名          | 类型   | 必填 | 默认值      | 描述                                                                     |
 | --------------- | ------ | ---- | ----------- | ------------------------------------------------------------------------ |
@@ -74,6 +99,14 @@ Content-Type: application/json
 GET /api/render?formula=%24E%3Dmc%5E2%24
 ```
 
+#### 直接在浏览器中显示图片
+
+```
+GET /api/render-direct?formula=%24E%3Dmc%5E2%24
+```
+
+将此URL直接粘贴到浏览器地址栏中，图片会直接显示，而不是下载。
+
 #### 渲染公式为红色PNG图像
 
 ```
@@ -98,6 +131,29 @@ GET /api/render?formula=%24%5Cint_%7Ba%7D%5E%7Bb%7D%20f(x)%20%5C%2C%20dx%20%3D%2
 
 ```
 GET /api/render?formula=%24%5Clim_{x%20%5Cto%20%5Cinfty}%20%5Cfrac{1}{x}%20%3D%200%24&width=400&height=100
+```
+
+## 接口区别
+
+### `/api/render` 与 `/api/render-direct` 的区别
+
+1. **`/api/render`**: 
+   - 返回图片数据，浏览器通常会下载文件
+   - 适合用于API调用和程序处理
+
+2. **`/api/render-direct`**: 
+   - 直接在浏览器中显示图片
+   - 设置了 `Content-Disposition: inline` 头
+   - 适合直接在浏览器中查看或嵌入到网页中
+
+### HTML中使用示例
+
+```html
+<!-- 直接嵌入图片 -->
+<img src="/api/render-direct?formula=%24E%3Dmc%5E2%24" alt="E=mc²">
+
+<!-- 带颜色和尺寸 -->
+<img src="/api/render-direct?formula=%24%5Cfrac%7B-b%20%5Cpm%20%5Csqrt%7Bb%5E2-4ac%7D%7D%7B2a%7D%24&color=%23FF0000&width=300" alt="二次方程求根公式">
 ```
 
 ## 参数详解
