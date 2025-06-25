@@ -82,7 +82,7 @@
             max-width: 100%;
             border: 1px solid #ddd;
             padding: 10px;
-            background-color: white;
+            /* background-color: white; -- Removed, now handled by JS */
         }
 
         .error {
@@ -236,6 +236,13 @@
         .flex-item {
             flex: 1;
         }
+
+        .checkerboard-bg {
+            background-color: #ffffff;
+            background-image: linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
     </style>
 </head>
 
@@ -305,6 +312,26 @@
         <div class="form-group" style="margin-top: 20px;">
             <button id="render">渲染公式</button>
             <button id="downloadButton">下载结果</button>
+        </div>
+
+        <!-- 新增：实时预览区域 -->
+        <div class="form-group" style="margin-top: 20px;">
+            <label>实时预览URL（可直接在浏览器中打开）:</label>
+            <div style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                <code id="previewUrl" style="word-break: break-all; font-size: 12px; color: #666;">
+                    请输入公式后自动生成预览URL
+                </code>
+            </div>
+            <div style="text-align: center; margin-bottom: 10px;">
+                <img id="previewImg" style="max-width: 100%; border: 1px solid #ddd; padding: 10px; display: none;"
+                    alt="公式预览">
+                <div id="previewPlaceholder"
+                    style="padding: 30px; border: 1px dashed #ccc; color: #999; border-radius: 4px;">
+                    📝 输入公式后将显示实时预览
+                </div>
+            </div>
+            <button id="copyUrlButton" style="background-color: #17a2b8; margin-right: 10px;">复制URL</button>
+            <button id="openUrlButton" style="background-color: #28a745;">在新窗口打开</button>
         </div>
 
         <div class="loading-spinner" id="loading"></div>
@@ -547,6 +574,101 @@
                 const loadingSpinner = document.getElementById('loading');
                 const exampleItems = document.querySelectorAll('.example-item');
 
+                // 新增：预览相关元素
+                const previewUrlElement = document.getElementById('previewUrl');
+                const previewImg = document.getElementById('previewImg');
+                const previewPlaceholder = document.getElementById('previewPlaceholder');
+                const copyUrlButton = document.getElementById('copyUrlButton');
+                const openUrlButton = document.getElementById('openUrlButton');
+
+                // 生成预览URL的函数
+                function generatePreviewUrl() {
+                    const formula = formulaInput.value.trim();
+                    if (!formula) {
+                        previewUrlElement.textContent = '请输入公式后自动生成预览URL';
+                        previewImg.style.display = 'none';
+                        previewPlaceholder.style.display = 'block';
+                        return '';
+                    }
+
+                    const params = new URLSearchParams();
+                    params.append('formula', formula);
+
+                    const color = colorInput.value;
+                    const backgroundColor = backgroundColorInput.value === '#ffffff' ? 'transparent' : backgroundColorInput.value;
+                    const fontSize = fontSizeSelect.value;
+                    const width = widthInput.value.trim();
+                    const height = heightInput.value.trim();
+                    const padding = paddingInput.value.trim() || '5';
+
+                    if (color !== '#000000') params.append('color', color);
+                    if (backgroundColor !== 'transparent') params.append('backgroundColor', backgroundColor);
+                    if (fontSize) params.append('fontSize', fontSize);
+                    if (width) params.append('width', width);
+                    if (height) params.append('height', height);
+                    if (padding !== '5') params.append('padding', padding);
+
+                    const url = `/api/render-direct?${params.toString()}`;
+                    const fullUrl = `${window.location.origin}${url}`;
+
+                    previewUrlElement.textContent = fullUrl;
+
+                    // 更新预览图片
+                    previewImg.src = url;
+                    previewImg.style.display = 'block';
+                    previewPlaceholder.style.display = 'none';
+
+                    // 根据背景设置更新预览图的样式
+                    if (backgroundColor === 'transparent') {
+                        previewImg.classList.add('checkerboard-bg');
+                        previewImg.style.backgroundColor = '';
+                    } else {
+                        previewImg.classList.remove('checkerboard-bg');
+                        previewImg.style.backgroundColor = backgroundColor;
+                    }
+
+                    return fullUrl;
+                }
+
+                // 监听输入变化，实时更新预览
+                function updatePreview() {
+                    generatePreviewUrl();
+                }
+
+                formulaInput.addEventListener('input', updatePreview);
+                colorInput.addEventListener('input', updatePreview);
+                backgroundColorInput.addEventListener('input', updatePreview);
+                fontSizeSelect.addEventListener('change', updatePreview);
+                widthInput.addEventListener('input', updatePreview);
+                heightInput.addEventListener('input', updatePreview);
+                paddingInput.addEventListener('input', updatePreview);
+
+                // 复制URL按钮
+                copyUrlButton.addEventListener('click', function () {
+                    const url = previewUrlElement.textContent;
+                    if (url && url !== '请输入公式后自动生成预览URL') {
+                        navigator.clipboard.writeText(url).then(function () {
+                            const originalText = copyUrlButton.textContent;
+                            copyUrlButton.textContent = '已复制!';
+                            copyUrlButton.style.backgroundColor = '#28a745';
+                            setTimeout(function () {
+                                copyUrlButton.textContent = originalText;
+                                copyUrlButton.style.backgroundColor = '#17a2b8';
+                            }, 2000);
+                        }).catch(function () {
+                            alert('复制失败，请手动复制URL');
+                        });
+                    }
+                });
+
+                // 在新窗口打开URL按钮
+                openUrlButton.addEventListener('click', function () {
+                    const url = previewUrlElement.textContent;
+                    if (url && url !== '请输入公式后自动生成预览URL') {
+                        window.open(url, '_blank');
+                    }
+                });
+
                 // 设置可折叠部分
                 const collapsibles = document.querySelectorAll(".collapsible");
                 collapsibles.forEach(item => {
@@ -565,6 +687,7 @@
                 exampleItems.forEach(item => {
                     item.addEventListener('click', function () {
                         formulaInput.value = this.getAttribute('data-formula');
+                        updatePreview(); // 点击示例后更新预览
                     });
                 });
 
@@ -679,8 +802,16 @@
                         const blob = await response.blob();
                         const imageUrl = URL.createObjectURL(blob);
 
+                        // 根据背景设置图片样式
+                        let imgHtml;
+                        if (backgroundColor === 'transparent') {
+                            imgHtml = `<img src="${imageUrl}" class="checkerboard-bg" alt="渲染公式">`;
+                        } else {
+                            imgHtml = `<img src="${imageUrl}" style="background-color: ${backgroundColor};" alt="渲染公式">`;
+                        }
+
                         // 显示结果
-                        resultDiv.innerHTML = `<img src="${imageUrl}" alt="渲染公式">`;
+                        resultDiv.innerHTML = imgHtml;
                     } catch (error) {
                         console.error('渲染错误:', error);
 

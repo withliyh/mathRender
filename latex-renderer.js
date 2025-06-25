@@ -471,6 +471,7 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
 
     const adjustedDpi = dpi;
     console.log(`🖼️ PDF->PNG [${taskId}]: DPI=${adjustedDpi}`);
+    console.log(`🎨 背景设置调试 [${taskId}]: backgroundColor="${backgroundColor}"`);
 
     // 检查pdftocairo是否可用
     if (!await checkPdftocairoAvailable()) {
@@ -484,13 +485,22 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
     // 如果需要透明背景，添加透明参数
     if (backgroundColor === 'transparent') {
         pdftocairoArgs.push('-transp');
+        console.log(`✅ 透明背景 [${taskId}]: 已添加 -transp 参数`);
+    } else {
+        console.log(`❌ 非透明背景 [${taskId}]: backgroundColor="${backgroundColor}"，未添加 -transp 参数`);
     }
 
     pdftocairoArgs.push(pdfFilename, pngBaseFilename);
+    console.log(`🚀 pdftocairo命令 [${taskId}]: ${CONFIG.pdftocairoPath} ${pdftocairoArgs.join(' ')}`);
 
-    await executeCommand(CONFIG.pdftocairoPath, pdftocairoArgs, {
-        cwd: CONFIG.baseDir
-    });
+    try {
+        await executeCommand(CONFIG.pdftocairoPath, pdftocairoArgs, {
+            cwd: CONFIG.baseDir
+        });
+    } catch (error) {
+        console.error(`❌ pdftocairo 执行失败: ${error.message}`);
+        throw new Error(`pdftocairo 转换失败: ${error.message}`);
+    }
 
     // 查找生成的PNG文件
     const sourcePngPath = await findGeneratedPngFile(taskId);
@@ -514,14 +524,16 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
             try {
                 const outputFilename = `${taskId}_processed.png`;
                 const outputPath = path.join(CONFIG.baseDir, outputFilename);
+
+                // 构建ImageMagick命令参数
                 const convertArgs = ['convert', path.basename(sourcePngPath)];
 
-                // 根据选项决定是否修剪
+                // 步骤1: 修剪图像
                 if (trim) {
                     convertArgs.push('-trim', '+repage');
                 }
 
-                // 处理尺寸调整
+                // 步骤2: 调整尺寸
                 if (width && !height) {
                     convertArgs.push('-resize', `${width}x`);
                 } else if (!width && height) {
@@ -530,13 +542,25 @@ async function convertPdfToPng(taskId, pdfPath, dpi = 300, options = {}) {
                     convertArgs.push('-resize', `${width}x${height}!`);
                 }
 
-                // 处理内边距
+                // 步骤3: 添加内边距 (使用正确的方法)
                 if (padding > 0) {
-                    convertArgs.push('-bordercolor', 'transparent');
-                    convertArgs.push('-border', `${padding}`);
+                    if (backgroundColor === 'transparent') {
+                        // 对于透明背景，-extent 是最可靠的方法
+                        // 它会创建一个新的透明画布，并将原图居中放置
+                        convertArgs.push('-background', 'transparent');
+                        convertArgs.push('-gravity', 'center');
+                        const extentSize = `%[fx:w+${padding * 2}]x%[fx:h+${padding * 2}]`;
+                        convertArgs.push('-extent', extentSize);
+                    } else {
+                        // 对于有颜色的背景，-border 更简单
+                        convertArgs.push('-bordercolor', backgroundColor);
+                        convertArgs.push('-border', `${padding}`);
+                    }
                 }
 
                 convertArgs.push(outputFilename);
+
+                console.log(`🚀 ImageMagick命令 [${taskId}]: ${CONFIG.imageMagickPath} ${convertArgs.join(' ')}`);
 
                 await executeCommand(CONFIG.imageMagickPath, convertArgs, {
                     cwd: CONFIG.baseDir
@@ -602,46 +626,84 @@ async function cleanupFiles(taskId) {
 async function renderWithPreciseSize(taskId, texContent, options, baseDpi) {
     const { width, height } = options;
 
-    // 如果没有指定尺寸，使用传统单步渲染
-    if (!width && !height) {
-        console.log(`📐 使用传统渲染 (DPI: ${baseDpi})`);
+    // 如果同时指定宽度和高度，则使用单步高质量渲染+ImageMagick拉伸
+    if (width && height) {
+        console.log(`📐 使用单步拉伸渲染法，目标尺寸: ${width}x${height}`);
+        const highDpi = 600; // 使用较高的DPI以获得更好的拉伸质量
         const pdfPath = await compileWithXeLaTeX(taskId, texContent);
-        const result = await convertPdfToPng(taskId, pdfPath, baseDpi, options);
+        const result = await convertPdfToPng(taskId, pdfPath, highDpi, options);
         return result.buffer;
     }
 
-    console.log(`📐 使用两步渲染法，目标尺寸: ${width || 'auto'}x${height || 'auto'}`);
+    // 如果只指定宽度或高度，使用两步渲染法以保持宽高比
+    console.log(`📐 使用两步渲染法（保持宽高比），目标尺寸: ${width || 'auto'}x${height || 'auto'}`);
 
-    // 第一步：使用默认DPI渲染，获取实际尺寸
-    console.log(`- 步骤1: 获取PDF实际尺寸 (基准DPI: ${baseDpi})`);
+    // 第一步：使用基准DPI渲染PNG，获取实际PNG像素尺寸
+    console.log(`- 步骤1: 获取基准DPI下的实际PNG尺寸 (基准DPI: ${baseDpi})`);
     const firstTaskId = `${taskId}_step1`;
-    const pdfPath = await compileWithXeLaTeX(firstTaskId, texContent);
-    const actualSize = await getPdfDimensions(pdfPath);
+    const firstPdfPath = await compileWithXeLaTeX(firstTaskId, texContent);
 
-    // 计算最终的目标像素尺寸
-    const targetPixelWidth = width;
-    const targetPixelHeight = height;
+    const firstStepOptions = {
+        ...options,
+        width: null, // 第一步不做尺寸调整，获取自然尺寸
+        height: null,
+        trim: true   // 修剪以获得实际内容尺寸
+    };
+    console.log(`🎨 第一步选项 [${firstTaskId}]: backgroundColor="${firstStepOptions.backgroundColor}"`);
 
-    // 第二步：计算最优DPI并重新渲染
-    const optimalDpi = calculateOptimalDPI(actualSize, { width: targetPixelWidth, height: targetPixelHeight }, baseDpi);
+    const { width: actualPngWidth, height: actualPngHeight } = await convertPdfToPng(firstTaskId, firstPdfPath, baseDpi, firstStepOptions);
 
-    console.log(`- 步骤2: 精确渲染 (计算DPI: ${optimalDpi})`);
+    if (!actualPngWidth || !actualPngHeight) {
+        throw new Error('无法获取第一步渲染的PNG尺寸');
+    }
+
+    console.log(`- 第一步实际PNG尺寸: ${actualPngWidth}x${actualPngHeight}px (DPI: ${baseDpi})`);
+
+    // 第二步：根据第一步的PNG尺寸和目标尺寸计算新DPI
+    let newDpi = baseDpi;
+
+    if (width && height) {
+        // 同时指定宽高时，选择较小的缩放比例以保持宽高比
+        const scaleX = width / actualPngWidth;
+        const scaleY = height / actualPngHeight;
+        const scale = Math.min(scaleX, scaleY);
+        newDpi = Math.round(baseDpi * scale);
+    } else if (width) {
+        // 只指定宽度
+        const scale = width / actualPngWidth;
+        newDpi = Math.round(baseDpi * scale);
+    } else if (height) {
+        // 只指定高度
+        const scale = height / actualPngHeight;
+        newDpi = Math.round(baseDpi * scale);
+    }
+
+    // DPI限制
+    newDpi = Math.max(50, Math.min(2400, newDpi));
+
+    console.log(`- 计算得出新DPI: ${newDpi} (缩放比例: ${(newDpi / baseDpi).toFixed(2)})`);
+
+    // 第二步：使用新DPI重新渲染
+    console.log(`- 步骤2: 使用新DPI重新渲染`);
     const secondTaskId = `${taskId}_step2`;
     const finalPdfPath = await compileWithXeLaTeX(secondTaskId, texContent);
-    const { buffer: finalPng, width: actualWidth, height: actualHeight } = await convertPdfToPng(secondTaskId, finalPdfPath, optimalDpi, {
+
+    const secondStepOptions = {
         ...options,
-        // 禁用ImageMagick的强制resize，因为我们已经通过DPI精确控制了
+        // 使用新DPI渲染后，不再需要ImageMagick强制调整尺寸
         width: null,
         height: null,
-        // 在精确尺寸模式下，始终进行修剪以与估算步骤保持一致
         trim: true
-    });
+    };
+    console.log(`🎨 第二步选项 [${secondTaskId}]: backgroundColor="${secondStepOptions.backgroundColor}"`);
+
+    const { buffer: finalPng, width: finalWidth, height: finalHeight } = await convertPdfToPng(secondTaskId, finalPdfPath, newDpi, secondStepOptions);
 
     console.log(`📊 尺寸对比:`);
-    console.log(`- 目标: ${targetPixelWidth || 'auto'} x ${targetPixelHeight || 'auto'} px`);
-    console.log(`- 实际: ${actualWidth || 'N/A'} x ${actualHeight || 'N/A'} px`);
+    console.log(`- 目标: ${width || 'auto'} x ${height || 'auto'} px`);
+    console.log(`- 实际: ${finalWidth || 'N/A'} x ${finalHeight || 'N/A'} px`);
 
-    // 清理第一步的临时文件
+    // 清理临时文件
     await cleanupFiles(firstTaskId);
     await cleanupFiles(secondTaskId);
 
@@ -660,6 +722,8 @@ async function renderLatex(formula, options = {}) {
     const DEFAULT_DPI = 300;
 
     console.log(`🚀 渲染任务 ${taskId}: "${formula.substring(0, 50)}${formula.length > 50 ? '...' : ''}"`);
+    console.log(`🎨 主渲染调试 [${taskId}]: 原始 backgroundColor="${options.backgroundColor}"`);
+    console.log(`🎨 主渲染调试 [${taskId}]: 标准化后 backgroundColor="${normalizedOptions.backgroundColor}"`);
 
     try {
         // 1. 生成XeLaTeX文档
